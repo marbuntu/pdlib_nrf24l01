@@ -109,14 +109,14 @@
  * 						PE3	<-> IRQ
  */
 
-#define PDLIB_DEBUG
+//#define PDLIB_DEBUG
 
 #include <stdio.h>
 #include <stdlib.h>
 #include "pdlib_nrf24l01.h"
 
 #ifdef PDLIB_DEBUG
-#include "uart_debug.h"
+	#include "uart_debug.h"
 #endif
 
 // SPI library
@@ -230,6 +230,17 @@ NRF24L01_Init(	unsigned long ulCEBase,
 
 #endif
 
+void NRF24L01_Init(void) {
+
+	_NRF24L01_CELow();
+
+	_NRF24L01_CSNHigh();
+
+	NRF24L01_RegisterInit();
+
+	internal_states |= INTERNAL_STATE_INIT;
+}
+
 
 /* PS:
  *
@@ -305,7 +316,7 @@ NRF24L01_RegisterInit()
 	NRF24L01_RegisterWrite_8(RF24_RX_ADDR_P3,0xC4);
 	NRF24L01_RegisterWrite_8(RF24_RX_ADDR_P4,0xC5);
 	NRF24L01_RegisterWrite_8(RF24_RX_ADDR_P5,0xC6);
-	NRF24L01_RegisterWrite_Multi(RF24_TX_ADDR,ucRxAddr1,5);
+	NRF24L01_RegisterWrite_Multi(RF24_TX_ADDR,ucRxAddr2,5);
 	NRF24L01_RegisterWrite_8(RF24_RX_PW_P0,0x00);
 	NRF24L01_RegisterWrite_8(RF24_RX_PW_P1,0x00);
 	NRF24L01_RegisterWrite_8(RF24_RX_PW_P2,0x00);
@@ -331,7 +342,8 @@ NRF24L01_RegisterInit()
 unsigned char 
 NRF24L01_GetStatus()
 {
-	NRF24L01_RegisterRead_8(RF24_NOP);
+	//NRF24L01_RegisterRead_8(RF24_NOP);
+	NRF24L01_RegisterRead_8(RF24_STATUS);
 	return g_ucStatus;
 }
 
@@ -1716,12 +1728,20 @@ NRF24L01_RegisterWrite_8(unsigned char ucRegister, unsigned char ucValue)
 	
 	_NRF24L01_CSNLow();
 	
+
+
 #ifdef PDLIB_SPI
 	/* PS: Send address */
 	g_ucStatus = pdlibSPI_TransferByte(ucData[0]);
 
 	/* PS: Send data */
 	pdlibSPI_TransferByte(ucData[1]);
+
+#elif defined(APPS_RF_APP_H_)
+
+	rf_transmit(&ucData[0], 2);
+
+
 #endif
 
 	_NRF24L01_CSNHigh();
@@ -1751,17 +1771,31 @@ NRF24L01_RegisterWrite_Multi(	unsigned char ucRegister,
 {
 	if(NULL != pucData)
 	{
-		unsigned char *pucBuffer = (unsigned char*) malloc(sizeof(unsigned char) * (uiLength));
+		unsigned char *pucBuffer = (unsigned char*) malloc(sizeof(unsigned char) * ((uiLength) + 1));
 		
 		if(NULL != pucBuffer)
 		{
+
+#ifdef PDLIB_SPI
+
 			memcpy(pucBuffer, pucData, uiLength);
 
 			_NRF24L01_CSNLow();
 
-#ifdef PDLIB_SPI
+
 			g_ucStatus = pdlibSPI_TransferByte(RF24_W_REGISTER | ucRegister);
 			pdlibSPI_SendData(pucBuffer, uiLength);
+
+#elif defined(APPS_RF_APP_H_)
+
+			pucBuffer[0] = RF24_W_REGISTER | ucRegister;
+			memcpy(&(pucBuffer[1]), pucData, uiLength);
+
+			_NRF24L01_CSNLow();
+
+
+			rf_transmit(pucBuffer, (uiLength+1));
+
 #endif
 			_NRF24L01_CSNHigh();
 
@@ -1785,6 +1819,8 @@ NRF24L01_RegisterWrite_Multi(	unsigned char ucRegister,
  * 
  */
  
+
+#ifdef PDLIB_SPI
 unsigned char
 NRF24L01_RegisterRead_8(unsigned char ucRegister)
 {
@@ -1792,16 +1828,34 @@ NRF24L01_RegisterRead_8(unsigned char ucRegister)
 
 	_NRF24L01_CSNLow();
 
-#ifdef PDLIB_SPI
 	g_ucStatus = pdlibSPI_TransferByte(RF24_R_REGISTER | ucRegister);
-	
 	ucData = pdlibSPI_TransferByte(RF24_NOP);
-#endif
-
+	
 	_NRF24L01_CSNHigh();
 
 	return ucData;
 }
+
+#elif defined(APPS_RF_APP_H_)
+unsigned char NRF24L01_RegisterRead_8(unsigned char ucRegister) {
+
+	unsigned char rxData[] = {0, 0};
+	unsigned char txData[] = {(RF24_R_REGISTER | ucRegister), RF24_NOP};
+
+	_NRF24L01_CSNLow();
+
+	rf_spiTransfer(&txData[0], &rxData[0], 2);
+	//rf_spiTransfer(unsigned char *txBuf, unsigned char *rxBuf, uint16_t len);
+	_NRF24L01_CSNHigh();
+
+	return rxData[1];
+}
+
+
+#endif
+
+
+
 
 
 /* PS:
@@ -1825,17 +1879,25 @@ NRF24L01_RegisterRead_Multi(	unsigned char ucRegister,
 								unsigned char *pucBuffer,
 								unsigned int uiLength)
 {
-	int i;
 
 	_NRF24L01_CSNLow();
 
 #ifdef PDLIB_SPI
 	g_ucStatus = pdlibSPI_TransferByte(RF24_R_REGISTER | ucRegister);
 
-	for(i = 0; i<uiLength; i++)
+	for(int i = 0; i<uiLength; i++)
 	{
 		pucBuffer[i] = pdlibSPI_TransferByte(RF24_NOP);
 	}
+
+#elif defined(APPS_RF_APP_H_)
+	unsigned char cmd = (RF24_R_REGISTER | ucRegister);
+	unsigned char *txb = calloc(uiLength, sizeof(unsigned char));
+
+	rf_transmit(&cmd, 1);
+	rf_spiTransfer(txb, pucBuffer, uiLength);
+
+
 #endif
 
 	_NRF24L01_CSNHigh();
@@ -1942,12 +2004,22 @@ void NRF24L01_SendRcvCommand(unsigned char ucCommand, char *pcData, unsigned int
  *
  */
 
+#include "hal_conf.h"
+
 static void
 _NRF24L01_CELow()
 {
 #ifdef PART_LM4F120H5QR
 	ROM_GPIOPinWrite(g_ulCEBase, g_ulCEPin, 0x00);
+
+#elif defined(STM32F1xx)
+	RF_CE_PORT->BRR = RF_CE_PIN;
+
+#elif defined(STM32H7xx)
+	RF_CE_PORT->BSRRH =RF_CE_PIN;
+
 #endif
+
 
 	if(internal_states & INTERNAL_STATE_POWER_UP){
 		internal_states |= INTERNAL_STATE_STAND_BY;
@@ -1974,6 +2046,13 @@ _NRF24L01_CEHigh()
 {
 #ifdef PART_LM4F120H5QR
 	ROM_GPIOPinWrite(g_ulCEBase, g_ulCEPin, 0xFF);
+
+#elif defined(STM32F1xx)
+	RF_CE_PORT->BSRR = RF_CE_PIN;
+
+#elif defined(STM32H7xx)
+	RF_CE_PORT->BSRRL =RF_CE_PIN;
+
 #endif
 
 	if(internal_states & INTERNAL_STATE_POWER_UP){
@@ -1999,6 +2078,13 @@ _NRF24L01_CSNLow()
 {
 #ifdef PART_LM4F120H5QR
 	ROM_GPIOPinWrite(g_ulCSNBase, g_ulCSNPin, 0x00);
+
+#elif defined(STM32F1xx)
+	RF_CSN_PORT->BRR = RF_CSN_PIN;
+
+#elif defined(STM32H7xx)
+	RF_CSN_PORT->BSRRH =RF_CSN_PIN;
+
 #endif
 }
 
@@ -2020,6 +2106,13 @@ _NRF24L01_CSNHigh()
 {
 #ifdef PART_LM4F120H5QR
 	ROM_GPIOPinWrite(g_ulCSNBase, g_ulCSNPin, 0xFF);
+
+#elif defined(STM32F1xx)
+	RF_CSN_PORT->BSRR = RF_CSN_PIN;
+
+#elif defined(STM32H7xx)
+	RF_CSN_PORT->BSRRL =RF_CSN_PIN;
+
 #endif
 }
 

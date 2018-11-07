@@ -29,7 +29,14 @@
 /* PS: Function prototypes */
 
 /* PS: Basic APIs */
-void NRF24L01_Init(unsigned long ulCEBase, unsigned long ulCEPin, unsigned long ulCEPeriph, unsigned long ulCSNBase, unsigned long ulCSNPin, unsigned long ulCSNPeriph, unsigned char ucSSIIndex);
+
+
+#ifdef PART_LM4F120H5QR
+	void NRF24L01_Init(unsigned long ulCEBase, unsigned long ulCEPin, unsigned long ulCEPeriph, unsigned long ulCSNBase, unsigned long ulCSNPin, unsigned long ulCSNPeriph, unsigned char ucSSIIndex);
+#elif defined(APPS_RF_APP_H_)
+	void NRF24L01_Init(void);
+#endif
+
 int NRF24L01_SendData(char *pcData, unsigned int uiLength);
 int NRF24L01_SendDataTo(unsigned char *address, char *pcData, unsigned int uiLength);
 int NRF24L01_WaitForDataRx(char *pcPipeNo);

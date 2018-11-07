@@ -29,6 +29,13 @@
 #ifndef _NRF24L01_H
 #define _NRF24L01_H
 
+#ifdef STM32F1xx
+	#include "stm32f1xx.h"
+#elif defined(STM32H7xx)
+	#include "stm32h7xx.h"
+#endif
+
+#include "rf_app.h"
 
 #define	BIT0	1 << 0
 #define	BIT1	1 << 1
