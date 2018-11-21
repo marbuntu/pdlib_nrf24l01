@@ -35,7 +35,9 @@
 	#include "stm32h7xx.h"
 #endif
 
-#include "rf_app.h"
+#ifdef FREERTOS
+	#include "rf_app.h"
+#endif
 
 #define	BIT0	1 << 0
 #define	BIT1	1 << 1

@@ -3,6 +3,8 @@
 
 #include "nRF24L01.h"
 
+#include "rf_app.h"
+
 /* Configurations */
 
 //#define NRF24L01_CONF_INTERRUPT_PIN
@@ -34,6 +36,8 @@
 #ifdef PART_LM4F120H5QR
 	void NRF24L01_Init(unsigned long ulCEBase, unsigned long ulCEPin, unsigned long ulCEPeriph, unsigned long ulCSNBase, unsigned long ulCSNPin, unsigned long ulCSNPeriph, unsigned char ucSSIIndex);
 #elif defined(APPS_RF_APP_H_)
+	void NRF24L01_Init(void);
+#else
 	void NRF24L01_Init(void);
 #endif
 
