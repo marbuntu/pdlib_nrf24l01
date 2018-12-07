@@ -27,12 +27,12 @@
 
 #include <stdio.h>
 #include "pdlib_spi.h"
-#include "inc/hw_memmap.h"
-#include "inc/hw_types.h"
-#include "inc/hw_ssi.h"
-#include "driverlib/gpio.h"
-#include "driverlib/ssi.h"
-#include "driverlib/rom.h"
+//#include "inc/hw_memmap.h"
+//#include "inc/hw_types.h"
+//#include "inc/hw_ssi.h"
+//#include "driverlib/gpio.h"
+//#include "driverlib/ssi.h"
+//#include "driverlib/rom.h"
 
 #define SSIPERIPH   0
 #define SSIBASE     1

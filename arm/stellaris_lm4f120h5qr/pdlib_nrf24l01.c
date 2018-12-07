@@ -314,14 +314,14 @@ NRF24L01_RegisterInit()
 	unsigned char ucTxAddr[5] = {0xB2, 0xB3, 0xB4, 0xB5, RF_ID_SENDER};
 	unsigned char ucRxAddr[5] = {0xB2, 0xB3, 0xB4, 0xB6, RF_ID_RECEIV};
 
-	NRF24L01_RegisterWrite_8(RF24_CONFIG,0x08);
+	NRF24L01_RegisterWrite_8(RF24_CONFIG,0x7e);
 
 #elif defined(TEST_RECEIVER)
 
 	unsigned char ucTxAddr[5] = {0xB2, 0xB3, 0xB4, 0xB5, RF_ID_RECEIV};
 	unsigned char ucRxAddr[5] = {0xB2, 0xB3, 0xB4, 0xB6, RF_ID_SENDER};
 
-	NRF24L01_RegisterWrite_8(RF24_CONFIG,0x09);
+	NRF24L01_RegisterWrite_8(RF24_CONFIG,0x79);
 #endif
 
 	NRF24L01_RegisterWrite_8(RF24_SETUP_AW,0x03);					// Use 5-Addr Bytes
@@ -334,21 +334,21 @@ NRF24L01_RegisterInit()
 	NRF24L01_RegisterWrite_8(RF24_RX_ADDR_P4,0xC5);
 	NRF24L01_RegisterWrite_8(RF24_RX_ADDR_P5,0xC6);
 
-	NRF24L01_RegisterWrite_8(RF24_SETUP_RETR,0x03);
+	NRF24L01_RegisterWrite_8(RF24_SETUP_RETR,0x15);
 	//NRF24L01_RegisterWrite_8(RF24_RF_CH,0x02);
 	NRF24L01_RegisterWrite_8(RF24_RF_CH, 0x4C);
-	NRF24L01_RegisterWrite_8(RF24_RF_SETUP,0x0F);
+	NRF24L01_RegisterWrite_8(RF24_RF_SETUP,0x0f);
 	NRF24L01_RegisterWrite_8(RF24_STATUS,0x70);
 	NRF24L01_RegisterWrite_8(RF24_CD, 0x00);
 
 
 
 	NRF24L01_RegisterWrite_8(RF24_RX_PW_P0,0x08);
-	NRF24L01_RegisterWrite_8(RF24_RX_PW_P1,0x08);
-	NRF24L01_RegisterWrite_8(RF24_RX_PW_P2,0x08);
-	NRF24L01_RegisterWrite_8(RF24_RX_PW_P3,0x08);
-	NRF24L01_RegisterWrite_8(RF24_RX_PW_P4,0x08);
-	NRF24L01_RegisterWrite_8(RF24_RX_PW_P5,0x08);
+	NRF24L01_RegisterWrite_8(RF24_RX_PW_P1,0x09);
+	NRF24L01_RegisterWrite_8(RF24_RX_PW_P2,0x07);
+	NRF24L01_RegisterWrite_8(RF24_RX_PW_P3,0x0A);
+	NRF24L01_RegisterWrite_8(RF24_RX_PW_P4,0x06);
+	NRF24L01_RegisterWrite_8(RF24_RX_PW_P5,0x0B);
 	NRF24L01_RegisterWrite_8(RF24_DYNPD,0x00);
 	NRF24L01_RegisterWrite_8(RF24_FEATURE,0x00);
 }
@@ -1028,17 +1028,24 @@ NRF24L01_WaitForTxComplete(char busy_wait)
 
 	int cnt = 0;
 
-	NRF24L01_GetStatus();
+	uint8_t stat = NRF24L01_GetStatus();
+
+	uint8_t fifost = NRF24L01_RegisterRead_8(RF24_FIFO_STATUS);
 
 #ifdef PDLIB_DEBUG
 	PrintRegValue("Current status :",g_ucStatus);
 #endif
 
 	if(busy_wait == 0x01){
-		while(((g_ucStatus & RF24_MAX_RT) || (g_ucStatus & RF24_TX_DS)) == 0)
+		while(((stat & RF24_MAX_RT) || (stat & RF24_TX_DS)) == 0)
 		{
-			NRF24L01_GetStatus();
-			if(++cnt >= 100) return PDLIB_NRF24_TX_ARC_REACHED;
+			stat = NRF24L01_GetStatus();
+			fifost = NRF24L01_RegisterRead_8(RF24_FIFO_STATUS);
+			osDelay(1);
+			if(++cnt >= 100) {
+				ret = PDLIB_NRF24_ERROR;
+				break;
+			}
 		}
 	}else{
 		if(((g_ucStatus & RF24_MAX_RT) || (g_ucStatus & RF24_TX_DS)) == 0){
@@ -1047,7 +1054,7 @@ NRF24L01_WaitForTxComplete(char busy_wait)
 	}
 
 
-	if(g_ucStatus & RF24_MAX_RT)
+	if(stat & RF24_MAX_RT)
 	{
 #ifdef PDLIB_DEBUG
 		PrintRegValue("Maximum retransmissions reached!!! : status >> ",g_ucStatus);
@@ -1826,8 +1833,10 @@ NRF24L01_RegisterWrite_Multi(	unsigned char ucRegister,
 #endif
 			_NRF24L01_CSNHigh();
 
-			free(pucBuffer);
+
 		}
+
+		free(pucBuffer);
 	}
 }
 
@@ -1966,6 +1975,8 @@ NRF24L01_SendCommand(	unsigned char ucCommand,
 
 		_NRF24L01_CSNLow();
 
+		rf_transmit(pucBuffer, (uiLength + 1));
+
 #ifdef PDLIB_SPI
 		pdlibSPI_SendData(pucBuffer, uiLength+1);
 #endif
@@ -1999,6 +2010,10 @@ void NRF24L01_SendRcvCommand(unsigned char ucCommand, char *pcData, unsigned int
 	if(pcData){
 		int i = 0;
 
+		unsigned char *pucBuffer = (unsigned char*) malloc(sizeof(unsigned char) * (uiLength + 1));
+		pucBuffer[0] = ucCommand;
+
+
 		_NRF24L01_CSNLow();
 
 #ifdef PDLIB_SPI
@@ -2009,6 +2024,11 @@ void NRF24L01_SendRcvCommand(unsigned char ucCommand, char *pcData, unsigned int
 			pcData[i] = pdlibSPI_TransferByte(RF24_NOP);
 		}
 #endif
+
+		rf_spiTransfer(pucBuffer, pucBuffer, (uiLength + 1));
+
+		memcpy(pcData, &pucBuffer[1], uiLength);
+
 		_NRF24L01_CSNHigh();
 	}
 }
